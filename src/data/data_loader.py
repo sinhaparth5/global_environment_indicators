@@ -9,7 +9,10 @@ class EnvironmentalDataLoader:
         try:
             # Correct path resolution (3 levels up from src/data)
             self.project_root = Path(__file__).resolve().parent.parent.parent
-            self.config = self._load_config(config_path)
+            config_file = self.project_root / config_path
+            
+            with open(config_file, 'r') as f:
+                self.config = yaml.safe_load(f)
             
             self.raw_data_path = self.project_root / self.config['data_paths']['raw_data']
             self.categories = self.config['data_categories']

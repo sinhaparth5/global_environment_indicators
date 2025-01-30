@@ -9,8 +9,12 @@ class EnvironmentalDataPreprocessor:
     def __init__(self, config_path='config.yaml'):
         try:
             # Path configuration
-            self.project_root = Path(__file__).resolve().parent.parent
-            self.config = self._load_config(config_path)
+            self.project_root = Path(__file__).resolve().parent.parent.parent
+            config_file = self.project_root / config_path
+            
+            with open(config_file, 'r') as f:
+                self.config = yaml.safe_load(f)
+                
             self.processed_path = self.project_root / self.config['data_paths']['processed_data']
             self.scalers = {}
             

@@ -15,4 +15,5 @@ dependencies = [
     "scikit-learn>=1.6.1",
     "seaborn>=0.13.2",
     "torch>=2.5.1",
+    "torchviz>=0.0.3",
 ]

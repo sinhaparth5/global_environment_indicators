@@ -5,108 +5,84 @@ from typing import Dict, List, Tuple
 
 class EmissionsPreprocessor:
     def __init__(self):
-        # Updated column mappings based on your CSV structure
         self.time_series_mappings = {
-            'CO2': ['Country ID', 'Country', 'Time Series - CO₂ total emissions  without LULUCF, in 1000 t'],
-            'CH4': ['Country ID', 'Country', 'Time Series - Total CH4 Emissions, in 1000 tonnes of CO₂ equivalent'],
-            'N2O': ['Country ID', 'Country', 'Time series - Total N2O emissions, in 1000 tonnes of CO2 equivalent'],
-            'NOx': ['Country ID', 'Country', 'Time Series - NOx total emissions, in 1000 t'],
-            'SO2': ['Country ID', 'Country', 'Time Series - SO2 total emissions, in 1000 t'],
-            'GHG': ['Country ID', 'Country', 'Time Series - Greenhouse Gas Emissions (GHG) total without LULUCF, in 1000 tonnes of CO2 equivalent']
+            'CO2': ['country_id', 'country', 'time_series_co2'],
+            'CH4': ['country_id', 'country', 'time_series_ch4'],
+            'N2O': ['country_id', 'country', 'time_series_n2o'],
+            'NOx': ['country_id', 'country', 'time_series_nox'],
+            'SO2': ['country_id', 'country', 'time_series_so2'],
+            'GHG': ['country_id', 'country', 'time_series_ghg']
         }
 
     def clean_emissions_data(self, df: pd.DataFrame, emission_type: str) -> pd.DataFrame:
-        """Clean individual emissions dataset with improved error handling."""
         try:
-            # Make a copy to avoid modifying original data
             df = df.copy()
-            
-            # Print debugging information
             print(f"\nProcessing {emission_type} emissions")
-            print(f"Available columns: {df.columns.tolist()}")
             
-            # Ensure required columns exist
-            if 'Country ID' not in df.columns or 'Country' not in df.columns:
-                print(f"Required columns missing in {emission_type} dataset")
-                print(f"Available columns: {df.columns.tolist()}")
-                return pd.DataFrame()  # Return empty DataFrame if required columns missing
+            # Check for required columns
+            if 'country_id' not in df.columns or 'country' not in df.columns:
+                print(f"Missing country columns in {emission_type} data")
+                return pd.DataFrame()
+                
+            # Identify year columns (1900-2100)
+            year_columns = [col for col in df.columns 
+                          if col.isdigit() and 1900 <= int(col) <= 2100]
             
-            # Clean country data if column exists
-            df['Country'] = df['Country'].astype(str).str.strip()
-            
-            # Extract year columns (they are typically unnamed)
-            year_columns = []
-            for col in df.columns:
-                if col.startswith('Unnamed:'):
-                    # Try to convert to numeric and check if it contains valid data
-                    numeric_data = pd.to_numeric(df[col], errors='coerce')
-                    if not numeric_data.isna().all():  # If column contains some numeric data
-                        year_columns.append(col)
-                        df[col] = numeric_data
-            
+            if not year_columns:
+                print(f"No year columns found in {emission_type} data")
+                return pd.DataFrame()
+                
+            # Convert year columns to numeric
+            for col in year_columns:
+                df[col] = pd.to_numeric(df[col], errors='coerce')
+                
             # Create cleaned dataset
-            keep_columns = ['Country ID', 'Country'] + year_columns
+            keep_columns = ['country_id', 'country'] + year_columns
             cleaned_df = df[keep_columns].copy()
-            
-            # Rename year columns (assuming they represent years from 1990 onwards)
-            year_mapping = dict(zip(year_columns, range(1990, 1990 + len(year_columns))))
-            cleaned_df = cleaned_df.rename(columns=year_mapping)
-            
-            # Add emission type identifier
             cleaned_df['emission_type'] = emission_type
             
             return cleaned_df
             
         except Exception as e:
-            print(f"Error in clean_emissions_data for {emission_type}: {str(e)}")
+            print(f"Error cleaning {emission_type} data: {str(e)}")
             return pd.DataFrame()
 
     def preprocess_ghg_sectors(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Preprocess GHG emissions by sector data with improved error handling."""
         try:
             sectors_df = df.copy()
             
-            # Identify and convert percentage columns
-            percentage_cols = [col for col in sectors_df.columns if 'percentage' in col.lower()]
-            for col in percentage_cols:
+            # Process numeric columns
+            for col in sectors_df.columns:
+                if sectors_df[col].dtype == object:
+                    sectors_df[col] = sectors_df[col].astype(str).str.replace(',', '')
                 sectors_df[col] = pd.to_numeric(sectors_df[col], errors='coerce')
             
-            # Identify and convert emission columns
-            emission_cols = [col for col in sectors_df.columns 
-                           if any(term in col for term in ['CO₂', 'CO2', 'tonnes'])]
-            for col in emission_cols:
-                sectors_df[col] = pd.to_numeric(sectors_df[col].str.replace(',', ''), errors='coerce')
-            
-            return sectors_df
+            return sectors_df.dropna(how='all')
             
         except Exception as e:
-            print(f"Error in preprocess_ghg_sectors: {str(e)}")
+            print(f"GHG sector error: {str(e)}")
             return pd.DataFrame()
 
     def combine_emissions_data(self, data_dict: Dict[str, pd.DataFrame]) -> Tuple[pd.DataFrame, pd.DataFrame]:
-        """Combine all emissions data with improved error handling."""
         emissions_dfs = []
         
-        # Process each emissions dataset
         for filename, df in data_dict.items():
             try:
-                # Extract emission type from filename
-                emission_type = filename.split('_')[0]
-                if emission_type in ['CO2', 'CH4', 'N2O', 'NOx', 'SO2', 'GHG']:
-                    cleaned_df = self.clean_emissions_data(df, emission_type)
-                    if not cleaned_df.empty:
-                        emissions_dfs.append(cleaned_df)
-                        print(f"Successfully processed {filename}")
+                # Skip sector data for now
+                if 'sector' in filename.lower():
+                    continue
+                    
+                emission_type = filename.split('_')[0].upper()
+                cleaned_df = self.clean_emissions_data(df, emission_type)
+                if not cleaned_df.empty:
+                    emissions_dfs.append(cleaned_df)
+                    print(f"Processed {filename} successfully")
                     
             except Exception as e:
-                print(f"Error processing {filename}: {str(e)}")
+                print(f"Skipping {filename}: {str(e)}")
                 continue
         
-        # Combine all emissions data
-        if emissions_dfs:
-            combined_emissions = pd.concat(emissions_dfs, ignore_index=True)
-        else:
-            combined_emissions = pd.DataFrame()
+        combined_emissions = pd.concat(emissions_dfs, ignore_index=True) if emissions_dfs else pd.DataFrame()
         
         # Process sector data separately
         sectors_df = pd.DataFrame()
@@ -115,43 +91,26 @@ class EmissionsPreprocessor:
         
         return combined_emissions, sectors_df
 
-    def create_analysis_ready_dataset(self, 
-                                    combined_emissions: pd.DataFrame, 
-                                    sectors_df: pd.DataFrame) -> pd.DataFrame:
-        """Create final analysis-ready dataset with improved error handling."""
+    def create_analysis_ready_dataset(self, combined_emissions: pd.DataFrame, sectors_df: pd.DataFrame) -> pd.DataFrame:
         try:
             if combined_emissions.empty:
-                print("No emissions data to process")
                 return pd.DataFrame()
+                
+            # Melt to long format
+            id_vars = ['country_id', 'country', 'emission_type']
+            year_cols = [col for col in combined_emissions.columns if col.isdigit()]
             
-            # Melt the combined emissions data to long format
-            id_vars = ['Country ID', 'Country', 'emission_type']
-            value_vars = [col for col in combined_emissions.columns 
-                         if col not in id_vars and col.isdigit()]
-            
-            melted_emissions = pd.melt(
+            melted = pd.melt(
                 combined_emissions,
                 id_vars=id_vars,
-                value_vars=value_vars,
+                value_vars=year_cols,
                 var_name='year',
                 value_name='emission_value'
             )
             
-            # Convert year to integer and sort
-            melted_emissions['year'] = pd.to_numeric(melted_emissions['year'])
-            melted_emissions = melted_emissions.sort_values(['Country', 'emission_type', 'year'])
-            
-            # Add sector information if available
-            if not sectors_df.empty:
-                sector_cols = [col for col in sectors_df.columns if 'percentage' in col.lower()]
-                melted_emissions = melted_emissions.merge(
-                    sectors_df[['Country ID', 'Latest Year Available'] + sector_cols],
-                    on='Country ID',
-                    how='left'
-                )
-            
-            return melted_emissions
+            melted['year'] = pd.to_numeric(melted['year'])
+            return melted.sort_values(['country', 'emission_type', 'year'])
             
         except Exception as e:
-            print(f"Error in create_analysis_ready_dataset: {str(e)}")
+            print(f"Analysis dataset error: {str(e)}")
             return pd.DataFrame()

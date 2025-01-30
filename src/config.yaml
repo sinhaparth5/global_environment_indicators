@@ -1,0 +1,23 @@
+data_paths:
+  raw_data: "data/raw"
+  processed_data: "data/processed"
+
+data_categories:
+  - Air and Climate
+  - Biodiversity
+  - Energy and Minerals
+  - Forests
+  - Governance
+  - Inland Water Resources
+  - Land and Agriculture
+  - Marine and Coastal Areas
+  - Natural Disasters
+  - Waste
+
+model_params:
+  hidden_size: 64
+  num_layers: 2
+  sequence_length: 24
+  batch_size: 32
+  learning_rate: 0.001
+  epochs: 100
